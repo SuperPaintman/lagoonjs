@@ -1,6 +1,6 @@
 {
   "name": "lagoonjs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Logging library for Node.js",
   "main": "./bin/lagoon.js",
   "author": {
@@ -11,8 +11,24 @@
   "scripts": {
     "start": "node ./bin/lagoon.js"
   },
-  "keywords": [],
-  "files": [],
+  "keywords": [
+    "logger"
+  ],
+  "files": [
+    "development",
+    "bin",
+    "readme",
+    "gulpfile.coffee",
+    "README.md",
+    ".npmignore"
+  ],
+  "directories": {
+    "src": "development"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SuperPaintman/lagoonjs.git"
+  },
   "license": "ISC",
   "devDependencies": {
     "benchmark": "^1.0.0",

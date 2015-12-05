@@ -1,12 +1,12 @@
 # Requires
 Benchmark   = require('benchmark')
-Lagoon      = require '../Lagoon'
+lagoon      = require '../lagoon'
 
 
 # Init
 suite = new Benchmark.Suite
 
-logger = new Lagoon()
+logger = new lagoon.Lagoon()
 
 # Time
 BenchmarkTimeConsole = new Benchmark 'Console#time', {

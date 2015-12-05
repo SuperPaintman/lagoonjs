@@ -1,11 +1,11 @@
-var Lagoon, logger;
+var lagoon, logger;
 
-Lagoon = require('../Lagoon');
+lagoon = require('../lagoon');
 
-logger = new Lagoon();
+logger = new lagoon.Lagoon();
 
 logger.on("logger", function(level, args) {
-  return console.log(level, '+');
+  return console.log(level, args);
 });
 
 logger.log("It's log");
@@ -31,3 +31,7 @@ logger.assert(1, 2);
 logger.dir(logger);
 
 logger.trace();
+
+lagoon.log('Default logger', '+');
+
+logger.log('Created logger', '+');

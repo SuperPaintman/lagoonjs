@@ -1,4 +1,4 @@
-var AVAILABLE_CONSOLES_METHODS, Console, EventEmitter, Logger, _, colors, dateFormat, defaultConsole, events, fs, mkdirp, path,
+var AVAILABLE_CONSOLES_METHODS, Console, EventEmitter, Lagoon, _, colors, dateFormat, defaultConsole, events, fs, mkdirp, path,
   extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
   hasProp = {}.hasOwnProperty,
   slice = [].slice,
@@ -26,12 +26,12 @@ EventEmitter = events.EventEmitter;
 
 defaultConsole = new Console(process.stdout, process.stderr);
 
-Logger = (function(superClass) {
+Lagoon = (function(superClass) {
   var _getData, _getFilename;
 
-  extend(Logger, superClass);
+  extend(Lagoon, superClass);
 
-  function Logger(opts) {
+  function Lagoon(opts) {
     if (opts == null) {
       opts = {};
     }
@@ -112,7 +112,7 @@ Logger = (function(superClass) {
     this.isDirectory = false;
   }
 
-  Logger.prototype.$getOffset = function() {
+  Lagoon.prototype.$getOffset = function() {
     var i, key, len, maxLen, offset, ref, ref1, ref2, results, value;
     maxLen = 0;
     ref = this.options.settings;
@@ -146,37 +146,37 @@ Logger = (function(superClass) {
    * Стандартные логи
    */
 
-  Logger.prototype.log = function() {
+  Lagoon.prototype.log = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return this._transportsSend("log", args);
   };
 
-  Logger.prototype.info = function() {
+  Lagoon.prototype.info = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return this._transportsSend("info", args);
   };
 
-  Logger.prototype.warn = function() {
+  Lagoon.prototype.warn = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return this._transportsSend("warn", args);
   };
 
-  Logger.prototype.error = function() {
+  Lagoon.prototype.error = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return this._transportsSend("error", args);
   };
 
-  Logger.prototype.fatal = function() {
+  Lagoon.prototype.fatal = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return this._transportsSend("fatal", args);
   };
 
-  Logger.prototype.debug = function() {
+  Lagoon.prototype.debug = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return this._transportsSend("debug", args);
@@ -187,14 +187,14 @@ Logger = (function(superClass) {
    * Время
    */
 
-  Logger.prototype.time = function(label) {
+  Lagoon.prototype.time = function(label) {
     if (label) {
       this.timers[label] = {};
       return this.timers[label].start = Date.now();
     }
   };
 
-  Logger.prototype.timeEnd = function(label, show) {
+  Lagoon.prototype.timeEnd = function(label, show) {
     var args, delta;
     if (show == null) {
       show = true;
@@ -207,7 +207,7 @@ Logger = (function(superClass) {
         args = [];
         args.push((colors["cyan"](label)) + ":");
         args.push((colors["green"](delta)) + "ms");
-        return this._transportsSend("time", args);
+        return this._transportsSend("time", args, [label, delta]);
       } else {
         return delta;
       }
@@ -219,19 +219,19 @@ Logger = (function(superClass) {
    * Default
    */
 
-  Logger.prototype.assert = function() {
+  Lagoon.prototype.assert = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return defaultConsole.assert.apply(this, args);
   };
 
-  Logger.prototype.dir = function() {
+  Lagoon.prototype.dir = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return defaultConsole.dir.apply(this, args);
   };
 
-  Logger.prototype.trace = function() {
+  Lagoon.prototype.trace = function() {
     var args;
     args = 1 <= arguments.length ? slice.call(arguments, 0) : [];
     return defaultConsole.trace.apply(this, args);
@@ -244,7 +244,7 @@ Logger = (function(superClass) {
    * @param  {Function} callback
    */
 
-  Logger.prototype.loadLogs = function(timestamp, callback) {
+  Lagoon.prototype.loadLogs = function(timestamp, callback) {
     var date, e, error1, filename, parhToLog, pathToFolder;
     if (typeof timestamp === 'function') {
       callback = timestamp;
@@ -322,11 +322,11 @@ Logger = (function(superClass) {
     return filename;
   };
 
-  Logger.prototype._getPathToLogs = function() {
+  Lagoon.prototype._getPathToLogs = function() {
     return this.options.transports.file.path;
   };
 
-  Logger.prototype._transportsSend = function(level, args) {
+  Lagoon.prototype._transportsSend = function(level, args, unformatedArgs) {
     var ref;
     if (level == null) {
       level = "log";
@@ -336,10 +336,19 @@ Logger = (function(superClass) {
         this._transportsConsole(level, args);
       }
       if (this.options.transports.file.use) {
-        this._transportsFile(level, args);
+        if (unformatedArgs) {
+          this._transportsFile(level, unformatedArgs);
+        } else {
+          this._transportsFile(level, args);
+        }
       }
-      this.emit("logger", level, args);
-      return this.emit("logger:" + level, args);
+      if (unformatedArgs) {
+        this.emit("logger", level, unformatedArgs);
+        return this.emit("logger:" + level, unformatedArgs);
+      } else {
+        this.emit("logger", level, args);
+        return this.emit("logger:" + level, args);
+      }
     }
   };
 
@@ -350,7 +359,7 @@ Logger = (function(superClass) {
    * @param  {Array} args         - аргументы лога
    */
 
-  Logger.prototype._transportsConsole = function(level, args) {
+  Lagoon.prototype._transportsConsole = function(level, args) {
     var date, logColor, logSettings, logs, method;
     if (level == null) {
       level = "log";
@@ -380,7 +389,7 @@ Logger = (function(superClass) {
     }
     return this.emit('transports:console', {
       level: level,
-      message: Array.prototype.slice.call(args).join(' '),
+      message: args,
       timestamp: date.now.getTime()
     });
   };
@@ -392,7 +401,7 @@ Logger = (function(superClass) {
    * @param  {Object} args        - аргументы лога
    */
 
-  Logger.prototype._transportsFile = function(level, args) {
+  Lagoon.prototype._transportsFile = function(level, args) {
     var date, e, error1, error2, filename, jsonLog, parhToLog, pathToFolder;
     if (level == null) {
       level = "log";
@@ -415,7 +424,7 @@ Logger = (function(superClass) {
     try {
       jsonLog = JSON.stringify({
         level: level,
-        message: Array.prototype.slice.call(args).join(' '),
+        message: args,
         timestamp: date.formated
       });
       fs.appendFile(parhToLog, jsonLog + "\r\n");
@@ -425,13 +434,15 @@ Logger = (function(superClass) {
     }
     return this.emit('transports:file', {
       level: level,
-      message: Array.prototype.slice.call(args).join(' '),
+      message: args,
       timestamp: date.now.getTime()
     });
   };
 
-  return Logger;
+  return Lagoon;
 
 })(EventEmitter);
 
-module.exports = Logger;
+module.exports = new Lagoon();
+
+module.exports.Lagoon = Lagoon;

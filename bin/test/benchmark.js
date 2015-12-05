@@ -1,12 +1,12 @@
-var Benchmark, BenchmarkTimeConsole, BenchmarkTimeLagoon, Lagoon, logger, suite;
+var Benchmark, BenchmarkTimeConsole, BenchmarkTimeLagoon, lagoon, logger, suite;
 
 Benchmark = require('benchmark');
 
-Lagoon = require('../Lagoon');
+lagoon = require('../lagoon');
 
 suite = new Benchmark.Suite;
 
-logger = new Lagoon();
+logger = new lagoon.Lagoon();
 
 BenchmarkTimeConsole = new Benchmark('Console#time', {
   defer: true,

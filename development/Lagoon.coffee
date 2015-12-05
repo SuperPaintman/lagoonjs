@@ -22,7 +22,7 @@ EventEmitter    = events.EventEmitter
 
 defaultConsole  = new Console(process.stdout, process.stderr)
 
-class Logger extends EventEmitter
+class Lagoon extends EventEmitter
     constructor: (opts = {})->
         @options = {}
 
@@ -156,7 +156,10 @@ class Logger extends EventEmitter
                 args.push( "#{colors["cyan"]( label )}:" )
                 args.push( "#{colors["green"]( delta )}ms" )
 
-                @._transportsSend "time", args
+                @._transportsSend "time", args, [
+                    label
+                    delta
+                ]
             else
                 return delta
 
@@ -235,7 +238,7 @@ class Logger extends EventEmitter
 
     _getPathToLogs: -> @options.transports.file.path
 
-    _transportsSend: (level="log", args)->
+    _transportsSend: (level="log", args, unformatedArgs)->
         if @options.settings[ level ]?.use
             # Вывод в консоль
             if @options.transports.console.use
@@ -243,10 +246,17 @@ class Logger extends EventEmitter
 
             # Вывод в файл
             if @options.transports.file.use
-                @._transportsFile level, args
+                if unformatedArgs
+                    @._transportsFile level, unformatedArgs
+                else
+                    @._transportsFile level, args
 
-            @.emit "logger", level, args
-            @.emit "logger:#{ level }", args
+            if unformatedArgs
+                @.emit "logger", level, unformatedArgs
+                @.emit "logger:#{ level }", unformatedArgs
+            else
+                @.emit "logger", level, args
+                @.emit "logger:#{ level }", args
 
 
     ###*
@@ -282,7 +292,8 @@ class Logger extends EventEmitter
 
         @.emit 'transports:console', {
             level: level
-            message: Array.prototype.slice.call(args).join(' ')
+            # message: Array.prototype.slice.call(args).join(' ')
+            message: args
             timestamp: date.now.getTime()
         }
 
@@ -314,7 +325,8 @@ class Logger extends EventEmitter
         try
             jsonLog = JSON.stringify {
                 level: level
-                message: Array.prototype.slice.call(args).join(' ')
+                # message: Array.prototype.slice.call(args).join(' ')
+                message: args
                 timestamp: date.formated
             }
             fs.appendFile parhToLog, "#{jsonLog}\r\n"
@@ -323,9 +335,11 @@ class Logger extends EventEmitter
 
         @.emit 'transports:file', {
             level: level
-            message: Array.prototype.slice.call(args).join(' ')
+            # message: Array.prototype.slice.call(args).join(' ')
+            message: args
             timestamp: date.now.getTime()
         }
 
 # Exports
-module.exports = Logger
+module.exports          = new Lagoon()
+module.exports.Lagoon   = Lagoon

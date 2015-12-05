@@ -1,8 +1,8 @@
-Lagoon  = require '../Lagoon'
-logger  = new Lagoon()
+lagoon  = require '../lagoon'
+logger  = new lagoon.Lagoon()
 
 logger.on "logger", (level, args)->
-    console.log level, '+'
+    console.log level, args
 
 logger.log "It's log"
 logger.info "It's info"
@@ -19,3 +19,6 @@ setTimeout ->
 logger.assert(1, 2)
 logger.dir(logger)
 logger.trace()
+
+lagoon.log 'Default logger', '+'
+logger.log 'Created logger', '+'
