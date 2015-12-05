@@ -43,7 +43,7 @@ logger.log 'Created logger', '+'
 
 ```coffee
 opts:
-    settings
+    settings:
             log:
                 use:        true
                 colors:     "yellow"
