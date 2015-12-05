@@ -44,49 +44,49 @@ Lagoon = (function(superClass) {
     this.options.settings = {
       log: {
         use: true,
-        colors: "yellow",
+        color: "yellow",
         background: false,
         text: "log",
         trace: false
       },
       info: {
         use: true,
-        colors: "gray",
+        color: "gray",
         background: false,
         text: "info",
         trace: false
       },
       warn: {
         use: true,
-        colors: "cyan",
+        color: "cyan",
         background: false,
         text: "warn",
         trace: false
       },
       error: {
         use: true,
-        colors: "red",
+        color: "red",
         background: false,
         text: "error",
         trace: false
       },
       fatal: {
         use: true,
-        colors: "white",
+        color: "white",
         background: "bgRed",
         text: "fatal",
         trace: true
       },
       debug: {
         use: true,
-        colors: "magenta",
+        color: "magenta",
         background: false,
         text: "debug",
         trace: false
       },
       time: {
         use: true,
-        colors: "grey",
+        color: "grey",
         background: false,
         text: "time",
         trace: false
@@ -369,8 +369,8 @@ Lagoon = (function(superClass) {
     logs.push("[" + (colors["grey"](date.formated)) + "]");
     logSettings = this.options.settings[level];
     logColor = colors;
-    if (logSettings.colors) {
-      logColor = logColor[logSettings.colors];
+    if (logSettings.color) {
+      logColor = logColor[logSettings.color];
     }
     if (logSettings.background) {
       logColor = logColor[logSettings.background];
