@@ -8,6 +8,7 @@ colors          = require 'colors'
 dateFormat      = require 'dateformat'
 mkdirp          = require 'mkdirp'
 _               = require 'lodash'
+Promise         = require 'bluebird'
 
 # Consts
 AVAILABLE_CONSOLES_METHODS = [
@@ -17,10 +18,39 @@ AVAILABLE_CONSOLES_METHODS = [
     "warn"
 ]
 
+FILENAME_VARIABLE_REGEXP = /%(\w+)%/g
+
 # Init
 EventEmitter    = events.EventEmitter
 
 defaultConsole  = new Console(process.stdout, process.stderr)
+
+# Helps
+getData = (format = "console", timestamp = null)->
+    ###*
+     * Timestamp
+     * @type {Number}
+    ###
+    now = if timestamp then timestamp else Date.now()
+
+    switch format
+        when "console"
+            form = "HH:MM:ss"
+            formated = dateFormat now, form
+        when "file"
+            form = "yyyy-mm-dd"
+            formated = dateFormat now, form
+        when "timestamp"
+            formated = parseInt now, 10
+        else
+            form = format
+            formated = dateFormat now, form
+
+    return {
+        now
+        formated
+        form
+    }
 
 class Lagoon extends EventEmitter
     constructor: (opts = {})->
@@ -83,25 +113,41 @@ class Lagoon extends EventEmitter
             console:
                 use:    true
             file:
-                use:    false
-                path:   "./logs/"
+                use:        false
+                filename:   "./logs/log-%date%.log"
+        }
+
+        ###*
+         * Variavles for filename
+         * 
+         * Formated:
+         * * `%date%`       - date in **yyyy.mm.dd** format
+         * * `%timestamp%`  - date in **timestamp**
+         * * `%level%`      - Level of **current log**
+        ###
+        @options.variables = {
+            "date":         -> getData("file").formated
+            "timestamp":    -> getData("timestamp").formated
         }
 
         # Мердж опций
         @options = _.merge @options, opts
 
         # Выравнивание заголовков
-        do @.$getOffset
+        do @._initTextOffset
 
         # Таймеры
         @timers = {}
 
         # Есть ли папка
-        @isDirectory = false
+        @_isDirectory = false
 
-        # @data = if opts?.levels then true else false
-
-    $getOffset: ->
+    ###*
+     * Инициализация отступа
+     *
+     * @private
+    ###
+    _initTextOffset: =>
         maxLen = 0
 
         for key, value of @options.settings
@@ -118,73 +164,59 @@ class Lagoon extends EventEmitter
                 for [0...maxLen - len]
                     offset += " " 
 
-                @options.settings[ key ].$$offset = offset
+                @options.settings[ key ]._offset = offset
+
+        return @
 
     ###*
-     * Стандартные логи
+     * Форматирование входной строки
+     * 
+     * @return
+     * {
+     *     root : "/",
+     *     dir : "/home/user/dir",
+     *     base : "file.txt",
+     *     ext : ".txt",
+     *     name : "file"
+     * }
     ###
-    log: (args...)->
-        @._transportsSend "log", args
-    info: (args...)->
-        @._transportsSend "info", args
-    warn: (args...)->
-        @._transportsSend "warn", args
-    error: (args...)->
-        @._transportsSend "error", args
-    fatal: (args...)->
-        @._transportsSend "fatal", args
-    debug: (args...)->
-        @._transportsSend "debug", args
+    _getFileInfo: (vars = {})=> 
+        filename = @options.transports.file.filename
 
-    ###*
-     * Время
-    ###
-    time: (label)->
-        if label
-            @timers[ label ] = {}
-            @timers[ label ].start = Date.now()
+        # Replace variables
+        filename = filename.replace FILENAME_VARIABLE_REGEXP, (matches...)=>
+            variable = matches[1]
 
-    timeEnd: (label, show = true)->
-        if label and @timers[ label ]
-            @timers[ label ].end = Date.now()
-            delta = @timers[ label ].end - @timers[ label ].start
-
-            delete @timers[ label ]
-
-            if show
-                args = []
-                args.push( "#{colors["cyan"]( label )}:" )
-                args.push( "#{colors["green"]( delta )}ms" )
-
-                @._transportsSend "time", args, [
-                    label
-                    delta
-                ]
+            # Function
+            if @options.variables[ variable ]
+                @options.variables[ variable ](@)
+            # Static
+            else if vars[ variable ]
+                vars[ variable ]
+            # Self
             else
-                return delta
+                matches[0]
 
-    ###*
-     * Default
-    ###
-    assert: (args...)-> defaultConsole.assert.apply @, args
-    dir: (args...)->    defaultConsole.dir.apply    @, args
-    trace: (args...)->  defaultConsole.trace.apply  @, args
+        return path.parse(filename)
 
     ###*
      * Загрузка лога
      * @param  {Number}   timestamp - Таймстамп файла
      * @param  {Function} callback  
+     *
+     * @deprecated
     ###
-    loadLogs: (timestamp, callback)->
+    ###
+    loadLogs: (timestamp, callback)=>
         # 1 Параметр
         if typeof timestamp == 'function'
             callback = timestamp
 
             timestamp = new Date().getTime()
 
-        pathToFolder = @._getPathToLogs()
+        pathToFolder = @._getFileInfo()
         filename = _getFilename()
-        date = _getData "timestamp", timestamp
+        date = getData "timestamp", timestamp
         parhToLog = path.join pathToFolder, filename
 
         try
@@ -204,41 +236,65 @@ class Lagoon extends EventEmitter
                 callback null, logs
         catch e
             @.emit 'error', e
+    ###
 
-    _getData = (format = "console", timestamp = null)->
-        if timestamp
-            now = new Date(timestamp)
-        else
-            now = new Date()
+    ###*
+     * Стандартные логи
+    ###
+    log: (args...)=>
+        @._transportsSend "log", args
+    info: (args...)=>
+        @._transportsSend "info", args
+    warn: (args...)=>
+        @._transportsSend "warn", args
+    error: (args...)=>
+        @._transportsSend "error", args
+    fatal: (args...)=>
+        @._transportsSend "fatal", args
+    debug: (args...)=>
+        @._transportsSend "debug", args
 
-        switch format
-            when "console"
-                form = "HH:MM:ss"
-                formated = dateFormat now, form
-            when "file"
-                form = "yyyy.mm.dd"
-                formated = dateFormat now, form
-            when "timestamp"
-                formated = parseInt now.getTime()
+    ###*
+     * Время
+    ###
+    time: (label)=>
+        if label
+            @timers[ label ] = {}
+            @timers[ label ].start = Date.now()
+
+    timeEnd: (label, show = true)=>
+        if label and @timers[ label ]
+            @timers[ label ].end = Date.now()
+            delta = @timers[ label ].end - @timers[ label ].start
+
+            delete @timers[ label ]
+
+            if show
+                args = []
+                args.push "#{colors["cyan"]( label )}:"
+                args.push "#{colors["green"]( delta )}ms"
+
+                @._transportsSend "time", args, [
+                    label
+                    delta
+                ]
             else
-                form = format
-                formated = dateFormat now, form
+                return delta
 
-        return {
-            now
-            formated
-            form
-        }
+    ###*
+     * Default
+    ###
+    assert: (args...)=> defaultConsole.assert.apply @, args
+    dir:    (args...)=> defaultConsole.dir.apply    @, args
+    trace:  (args...)=> defaultConsole.trace.apply  @, args
 
-    _getFilename = ->
-        date = _getData "file"
-        filename = "logger-#{date.formated}.log"
-
-        return filename
-
-    _getPathToLogs: -> @options.transports.file.path
-
-    _transportsSend: (level="log", args, unformatedArgs)->
+    ###*
+     * Паспределения по транспортам
+     * @param  {String}     [level="log"[]
+     * @param  {Array}      args
+     * @param  {Array}      [unformatedArgs=null] - Только для файлов
+    ###
+    _transportsSend: (level="log", args, unformatedArgs = null)=>
         if @options.settings[ level ]?.use
             # Вывод в консоль
             if @options.transports.console.use
@@ -264,9 +320,12 @@ class Lagoon extends EventEmitter
      * @param  {String} level       - уровень вывода
      * @param  {Array} args         - аргументы лога
     ###
-    _transportsConsole: (level="log", args)->
+    _transportsConsole: (level="log", args)=>
         logs = []
-        date = _getData "console"
+        # Текущая дата в формате HH:MM:ss
+        date = getData "console"
+
+        # Добавление времени
         logs.push "[#{colors["grey"](date.formated)}]"
 
         logSettings = @options.settings[ level ]
@@ -275,70 +334,78 @@ class Lagoon extends EventEmitter
         if logSettings.color       then logColor = logColor[ logSettings.color ]
         if logSettings.background  then logColor = logColor[ logSettings.background ]
 
-        logs.push "[#{ logColor(logSettings.text) }]#{ logSettings.$$offset }"
+        # Добавление уровня
+        logs.push "[#{ logColor(logSettings.text) }]#{ logSettings._offset }"
+        
+        # Добавление аргументов
         logs = logs.concat args
 
         # Console
         if logSettings.use
-            method = "log"
             if level in AVAILABLE_CONSOLES_METHODS
                 method = level
+            else
+                method = "log"
 
-            defaultConsole[ method ].apply @, logs
+            defaultConsole[ method ](logs...)
 
         # Trace
         if logSettings.trace
             defaultConsole.trace()
 
+        # Event
         @.emit 'transports:console', {
-            level: level
-            # message: Array.prototype.slice.call(args).join(' ')
-            message: args
-            timestamp: date.now.getTime()
+            level:      level
+            message:    args
+            timestamp:  date.now
         }
 
     ###*
      * Запись логов в файл
      * @param  {String} level       - уровень вывода
      * @param  {Object} args        - аргументы лога
+     *
+     * @return {Promise}
     ###
-    _transportsFile: (level="log", args)->
-        # Создание папки под гоги
-        pathToFolder = @._getPathToLogs()
-
-        unless @isDirectory
-            try
-                unless fs.lstatSync( pathToFolder ).isDirectory()
-                    mkdirp pathToFolder
-            catch e
-                mkdirp pathToFolder
-
-                # Убрана внутряняя ошибка
-                # @.emit 'error', e
-        @isDirectory = true
-
-        filename = _getFilename()
-        date = _getData "timestamp"
-
-        parhToLog = path.join pathToFolder, filename
-
-        try
-            jsonLog = JSON.stringify {
-                level: level
-                # message: Array.prototype.slice.call(args).join(' ')
-                message: args
-                timestamp: date.formated
-            }
-            fs.appendFile parhToLog, "#{jsonLog}\r\n"
-        catch e
-            @.emit 'error', e
-
-        @.emit 'transports:file', {
+    _transportsFile: (level="log", args)=>
+        # Информация о файле
+        pathInfo = @._getFileInfo({
             level: level
-            # message: Array.prototype.slice.call(args).join(' ')
-            message: args
-            timestamp: date.now.getTime()
-        }
+        })
+
+        # Текущее время
+        date = getData "timestamp"
+
+        # Создание папки
+        new Promise (resolve, reject)=>
+            mkdirp pathInfo.dir, (err)=>
+                if err then reject(err)
+                else resolve()
+        # Запись в файл
+        .then =>
+            # Полный путь до папки
+            parhToLog = path.join(pathInfo.dir, pathInfo.base)
+
+            jsonLog = JSON.stringify {
+                level:      level
+                message:    args
+                timestamp:  date.formated
+            }
+
+            new Promise (resolve, reject)=>
+                fs.appendFile parhToLog, "#{jsonLog}\r\n", (err)=>
+                    if err then reject(err)
+                    else resolve()
+        # Инициализация эвента
+        .done =>
+            # Event
+            @.emit 'transports:file', {
+                level:      level
+                message:    args
+                timestamp:  date.now
+            }
+        , (err)=>
+            @.emit 'error', err
 
 # Exports
 module.exports          = new Lagoon()

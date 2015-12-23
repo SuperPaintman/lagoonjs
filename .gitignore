@@ -16,6 +16,10 @@ release/
 # Docs
 docs/
 
+# Local test
+bin/_test.js
+development/_test.coffee
+
 # Все bat файлы
 *.bat
 

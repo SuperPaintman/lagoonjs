@@ -1,4 +1,5 @@
-var AVAILABLE_CONSOLES_METHODS, Console, EventEmitter, Lagoon, _, colors, dateFormat, defaultConsole, events, fs, mkdirp, path,
+var AVAILABLE_CONSOLES_METHODS, Console, EventEmitter, FILENAME_VARIABLE_REGEXP, Lagoon, Promise, _, colors, dateFormat, defaultConsole, events, fs, getData, mkdirp, path,
+  bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
   extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
   hasProp = {}.hasOwnProperty,
   slice = [].slice,
@@ -20,21 +21,76 @@ mkdirp = require('mkdirp');
 
 _ = require('lodash');
 
+Promise = require('bluebird');
+
 AVAILABLE_CONSOLES_METHODS = ["log", "error", "info", "warn"];
+
+FILENAME_VARIABLE_REGEXP = /%(\w+)%/g;
 
 EventEmitter = events.EventEmitter;
 
 defaultConsole = new Console(process.stdout, process.stderr);
 
-Lagoon = (function(superClass) {
-  var _getData, _getFilename;
+getData = function(format, timestamp) {
+  var form, formated, now;
+  if (format == null) {
+    format = "console";
+  }
+  if (timestamp == null) {
+    timestamp = null;
+  }
 
+  /**
+   * Timestamp
+   * @type {Number}
+   */
+  now = timestamp ? timestamp : Date.now();
+  switch (format) {
+    case "console":
+      form = "HH:MM:ss";
+      formated = dateFormat(now, form);
+      break;
+    case "file":
+      form = "yyyy-mm-dd";
+      formated = dateFormat(now, form);
+      break;
+    case "timestamp":
+      formated = parseInt(now, 10);
+      break;
+    default:
+      form = format;
+      formated = dateFormat(now, form);
+  }
+  return {
+    now: now,
+    formated: formated,
+    form: form
+  };
+};
+
+Lagoon = (function(superClass) {
   extend(Lagoon, superClass);
 
   function Lagoon(opts) {
     if (opts == null) {
       opts = {};
     }
+    this._transportsFile = bind(this._transportsFile, this);
+    this._transportsConsole = bind(this._transportsConsole, this);
+    this._transportsSend = bind(this._transportsSend, this);
+    this.trace = bind(this.trace, this);
+    this.dir = bind(this.dir, this);
+    this.assert = bind(this.assert, this);
+    this.timeEnd = bind(this.timeEnd, this);
+    this.time = bind(this.time, this);
+    this.debug = bind(this.debug, this);
+    this.fatal = bind(this.fatal, this);
+    this.error = bind(this.error, this);
+    this.warn = bind(this.warn, this);
+    this.info = bind(this.info, this);
+    this.log = bind(this.log, this);
+    this._getFileInfo = bind(this._getFileInfo, this);
+    this._initTextOffset = bind(this._initTextOffset, this);
     this.options = {};
 
     /**
@@ -103,17 +159,41 @@ Lagoon = (function(superClass) {
       },
       file: {
         use: false,
-        path: "./logs/"
+        filename: "./logs/log-%date%.log"
+      }
+    };
+
+    /**
+     * Variavles for filename
+     * 
+     * Formated:
+     * * `%date%`       - date in **yyyy.mm.dd** format
+     * * `%timestamp%`  - date in **timestamp**
+     * * `%level%`      - Level of **current log**
+     */
+    this.options.variables = {
+      "date": function() {
+        return getData("file").formated;
+      },
+      "timestamp": function() {
+        return getData("timestamp").formated;
       }
     };
     this.options = _.merge(this.options, opts);
-    this.$getOffset();
+    this._initTextOffset();
     this.timers = {};
-    this.isDirectory = false;
+    this._isDirectory = false;
   }
 
-  Lagoon.prototype.$getOffset = function() {
-    var i, key, len, maxLen, offset, ref, ref1, ref2, results, value;
+
+  /**
+   * Инициализация отступа
+   *
+   * @private
+   */
+
+  Lagoon.prototype._initTextOffset = function() {
+    var i, key, len, maxLen, offset, ref, ref1, ref2, value;
     maxLen = 0;
     ref = this.options.settings;
     for (key in ref) {
@@ -124,7 +204,6 @@ Lagoon = (function(superClass) {
       }
     }
     ref1 = this.options.settings;
-    results = [];
     for (key in ref1) {
       value = ref1[key];
       if (value.text != null) {
@@ -133,13 +212,90 @@ Lagoon = (function(superClass) {
         for (i = 0, ref2 = maxLen - len; 0 <= ref2 ? i < ref2 : i > ref2; 0 <= ref2 ? i++ : i--) {
           offset += " ";
         }
-        results.push(this.options.settings[key].$$offset = offset);
-      } else {
-        results.push(void 0);
+        this.options.settings[key]._offset = offset;
       }
     }
-    return results;
+    return this;
   };
+
+
+  /**
+   * Форматирование входной строки
+   * 
+   * @return
+   * {
+   *     root : "/",
+   *     dir : "/home/user/dir",
+   *     base : "file.txt",
+   *     ext : ".txt",
+   *     name : "file"
+   * }
+   */
+
+  Lagoon.prototype._getFileInfo = function(vars) {
+    var filename;
+    if (vars == null) {
+      vars = {};
+    }
+    filename = this.options.transports.file.filename;
+    filename = filename.replace(FILENAME_VARIABLE_REGEXP, (function(_this) {
+      return function() {
+        var matches, variable;
+        matches = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+        variable = matches[1];
+        if (_this.options.variables[variable]) {
+          return _this.options.variables[variable](_this);
+        } else if (vars[variable]) {
+          return vars[variable];
+        } else {
+          return matches[0];
+        }
+      };
+    })(this));
+    return path.parse(filename);
+  };
+
+
+  /**
+   * Загрузка лога
+   * @param  {Number}   timestamp - Таймстамп файла
+   * @param  {Function} callback  
+   *
+   * @deprecated
+   */
+
+
+  /*
+  loadLogs: (timestamp, callback)=>
+       * 1 Параметр
+      if typeof timestamp == 'function'
+          callback = timestamp
+  
+          timestamp = new Date().getTime()
+  
+      pathToFolder = @._getFileInfo()
+      filename = _getFilename()
+      date = getData "timestamp", timestamp
+      parhToLog = path.join pathToFolder, filename
+  
+      try
+          fs.readFile parhToLog, 'utf8', (err, data)->
+              if err then return callback err, null
+              reg = /({.*})(?:\r|\n|$)/gi
+  
+              data = data.toString()
+  
+              logs = []
+              while (log = reg.exec data) != null
+                  try
+                      logs.push JSON.parse log[0]
+                  catch error
+                      @.emit 'error', error
+  
+              callback null, logs
+      catch e
+          @.emit 'error', e
+   */
 
 
   /**
@@ -239,97 +395,19 @@ Lagoon = (function(superClass) {
 
 
   /**
-   * Загрузка лога
-   * @param  {Number}   timestamp - Таймстамп файла
-   * @param  {Function} callback
+   * Паспределения по транспортам
+   * @param  {String}     [level="log"[]
+   * @param  {Array}      args
+   * @param  {Array}      [unformatedArgs=null] - Только для файлов
    */
-
-  Lagoon.prototype.loadLogs = function(timestamp, callback) {
-    var date, e, error1, filename, parhToLog, pathToFolder;
-    if (typeof timestamp === 'function') {
-      callback = timestamp;
-      timestamp = new Date().getTime();
-    }
-    pathToFolder = this._getPathToLogs();
-    filename = _getFilename();
-    date = _getData("timestamp", timestamp);
-    parhToLog = path.join(pathToFolder, filename);
-    try {
-      return fs.readFile(parhToLog, 'utf8', function(err, data) {
-        var error, error1, log, logs, reg;
-        if (err) {
-          return callback(err, null);
-        }
-        reg = /({.*})(?:\r|\n|$)/gi;
-        data = data.toString();
-        logs = [];
-        while ((log = reg.exec(data)) !== null) {
-          try {
-            logs.push(JSON.parse(log[0]));
-          } catch (error1) {
-            error = error1;
-            this.emit('error', error);
-          }
-        }
-        return callback(null, logs);
-      });
-    } catch (error1) {
-      e = error1;
-      return this.emit('error', e);
-    }
-  };
-
-  _getData = function(format, timestamp) {
-    var form, formated, now;
-    if (format == null) {
-      format = "console";
-    }
-    if (timestamp == null) {
-      timestamp = null;
-    }
-    if (timestamp) {
-      now = new Date(timestamp);
-    } else {
-      now = new Date();
-    }
-    switch (format) {
-      case "console":
-        form = "HH:MM:ss";
-        formated = dateFormat(now, form);
-        break;
-      case "file":
-        form = "yyyy.mm.dd";
-        formated = dateFormat(now, form);
-        break;
-      case "timestamp":
-        formated = parseInt(now.getTime());
-        break;
-      default:
-        form = format;
-        formated = dateFormat(now, form);
-    }
-    return {
-      now: now,
-      formated: formated,
-      form: form
-    };
-  };
-
-  _getFilename = function() {
-    var date, filename;
-    date = _getData("file");
-    filename = "logger-" + date.formated + ".log";
-    return filename;
-  };
-
-  Lagoon.prototype._getPathToLogs = function() {
-    return this.options.transports.file.path;
-  };
 
   Lagoon.prototype._transportsSend = function(level, args, unformatedArgs) {
     var ref;
     if (level == null) {
       level = "log";
+    }
+    if (unformatedArgs == null) {
+      unformatedArgs = null;
     }
     if ((ref = this.options.settings[level]) != null ? ref.use : void 0) {
       if (this.options.transports.console.use) {
@@ -365,7 +443,7 @@ Lagoon = (function(superClass) {
       level = "log";
     }
     logs = [];
-    date = _getData("console");
+    date = getData("console");
     logs.push("[" + (colors["grey"](date.formated)) + "]");
     logSettings = this.options.settings[level];
     logColor = colors;
@@ -375,14 +453,15 @@ Lagoon = (function(superClass) {
     if (logSettings.background) {
       logColor = logColor[logSettings.background];
     }
-    logs.push("[" + (logColor(logSettings.text)) + "]" + logSettings.$$offset);
+    logs.push("[" + (logColor(logSettings.text)) + "]" + logSettings._offset);
     logs = logs.concat(args);
     if (logSettings.use) {
-      method = "log";
       if (indexOf.call(AVAILABLE_CONSOLES_METHODS, level) >= 0) {
         method = level;
+      } else {
+        method = "log";
       }
-      defaultConsole[method].apply(this, logs);
+      defaultConsole[method].apply(defaultConsole, logs);
     }
     if (logSettings.trace) {
       defaultConsole.trace();
@@ -390,7 +469,7 @@ Lagoon = (function(superClass) {
     return this.emit('transports:console', {
       level: level,
       message: args,
-      timestamp: date.now.getTime()
+      timestamp: date.now
     });
   };
 
@@ -399,44 +478,61 @@ Lagoon = (function(superClass) {
    * Запись логов в файл
    * @param  {String} level       - уровень вывода
    * @param  {Object} args        - аргументы лога
+   *
+   * @return {Promise}
    */
 
   Lagoon.prototype._transportsFile = function(level, args) {
-    var date, e, error1, error2, filename, jsonLog, parhToLog, pathToFolder;
+    var date, pathInfo;
     if (level == null) {
       level = "log";
     }
-    pathToFolder = this._getPathToLogs();
-    if (!this.isDirectory) {
-      try {
-        if (!fs.lstatSync(pathToFolder).isDirectory()) {
-          mkdirp(pathToFolder);
-        }
-      } catch (error1) {
-        e = error1;
-        mkdirp(pathToFolder);
-      }
-    }
-    this.isDirectory = true;
-    filename = _getFilename();
-    date = _getData("timestamp");
-    parhToLog = path.join(pathToFolder, filename);
-    try {
-      jsonLog = JSON.stringify({
-        level: level,
-        message: args,
-        timestamp: date.formated
-      });
-      fs.appendFile(parhToLog, jsonLog + "\r\n");
-    } catch (error2) {
-      e = error2;
-      this.emit('error', e);
-    }
-    return this.emit('transports:file', {
-      level: level,
-      message: args,
-      timestamp: date.now.getTime()
+    pathInfo = this._getFileInfo({
+      level: level
     });
+    date = getData("timestamp");
+    return new Promise((function(_this) {
+      return function(resolve, reject) {
+        return mkdirp(pathInfo.dir, function(err) {
+          if (err) {
+            return reject(err);
+          } else {
+            return resolve();
+          }
+        });
+      };
+    })(this)).then((function(_this) {
+      return function() {
+        var jsonLog, parhToLog;
+        parhToLog = path.join(pathInfo.dir, pathInfo.base);
+        jsonLog = JSON.stringify({
+          level: level,
+          message: args,
+          timestamp: date.formated
+        });
+        return new Promise(function(resolve, reject) {
+          return fs.appendFile(parhToLog, jsonLog + "\r\n", function(err) {
+            if (err) {
+              return reject(err);
+            } else {
+              return resolve();
+            }
+          });
+        });
+      };
+    })(this)).done((function(_this) {
+      return function() {
+        return _this.emit('transports:file', {
+          level: level,
+          message: args,
+          timestamp: date.now
+        });
+      };
+    })(this), (function(_this) {
+      return function(err) {
+        return _this.emit('error', err);
+      };
+    })(this));
   };
 
   return Lagoon;

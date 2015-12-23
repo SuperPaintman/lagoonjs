@@ -5,7 +5,7 @@
 npm install lagoonjs --save
 ```
 
--------------------------
+--------------------------------------------------------------------------------
 
 ## Usage
 ```coffee
@@ -35,7 +35,37 @@ lagoon.log 'Default logger', '+' # <- `lagoon`
 logger.log 'Created logger', '+'
 ```
 
--------------------------
+--------------------------------------------------------------------------------
+
+## Formatting filename
+You can set dynamic filename with variables.
+
+Default filename is set to: `"./logs/log-%date%.log"`.
+
+That is, `%date%` will be replaced by the date in the `yyyy-mm-dd` format.
+You can also set the variable names for folders.
+
+**Variable**:
+* `%date%`       - date in **yyyy.mm.dd** format
+* `%timestamp%`  - date in **timestamp**
+* `%level%`      - Level of **current log**
+
+You can define your own variables:
+
+```coffee
+lagoon  = require 'lagoonjs'
+logger  = new lagoon.Lagoon({
+    transports:
+        file:
+            use:        true
+            filename:   "./logs/log-%myVar%.log" # <- %myVar%
+
+    variables:
+        myVar: (LagoonLogger)-> Math.random() # <- LagoonLogger it's self `this` link to logger
+})
+```
+
+--------------------------------------------------------------------------------
 
 ## API
 ### Lagoon
@@ -44,54 +74,58 @@ logger.log 'Created logger', '+'
 ```coffee
 opts:
     settings:
-            log:
-                use:        true
-                color:      "yellow"
-                background: false
-                text:       "log"
-                trace:      false
-            info:
-                use:        true
-                color:      "gray"
-                background: false
-                text:       "info"
-                trace:      false
-            warn:
-                use:        true
-                color:      "cyan"
-                background: false
-                text:       "warn"
-                trace:      false
-            error:
-                use:        true
-                color:      "red"
-                background: false
-                text:       "error"
-                trace:      false
-            fatal:
-                use:        true
-                color:      "white"
-                background: "bgRed"
-                text:       "fatal"
-                trace:      true
-            debug:
-                use:        true
-                color:      "magenta"
-                background: false
-                text:       "debug"
-                trace:      false
-            time:
-                use:        true
-                color:      "grey"
-                background: false
-                text:       "time"
-                trace:      false
+        log:
+            use:        true
+            color:      "yellow"
+            background: false
+            text:       "log"
+            trace:      false
+        info:
+            use:        true
+            color:      "gray"
+            background: false
+            text:       "info"
+            trace:      false
+        warn:
+            use:        true
+            color:      "cyan"
+            background: false
+            text:       "warn"
+            trace:      false
+        error:
+            use:        true
+            color:      "red"
+            background: false
+            text:       "error"
+            trace:      false
+        fatal:
+            use:        true
+            color:      "white"
+            background: "bgRed"
+            text:       "fatal"
+            trace:      true
+        debug:
+            use:        true
+            color:      "magenta"
+            background: false
+            text:       "debug"
+            trace:      false
+        time:
+            use:        true
+            color:      "grey"
+            background: false
+            text:       "time"
+            trace:      false
     transports:
         console:
-            use:    true
+            use:        true
         file:
-            use:    false
-            path:   "./logs/"
+            use:        false
+            filename:   "./logs/log-%date%.log"
+
+    variables:
+        "date":         -> getData("file").formated
+        "timestamp":    -> getData("timestamp").formated
 ```
 
 ### Lagoon#log
@@ -112,7 +146,7 @@ opts:
 ### Lagoon#debug
 * **args...** {`Any`}
 
--------------------------
+--------------------------------------------------------------------------------
 
 ### Lagoon#time
 * **label** {`String`}
@@ -123,7 +157,7 @@ opts:
 
 * **return** {`Number`} - if **show** is *true*
 
--------------------------
+--------------------------------------------------------------------------------
 
 ### Lagoon#assert
 Default console method `console.assert`
@@ -133,3 +167,16 @@ Default console method `console.dir`
 
 ### Lagoon#trace
 Default console method `console.trace`
+
+--------------------------------------------------------------------------------
+
+## Changelog
+### 1.1.0 [`Stable`]
+```diff
++ Formatting filename with variables
+```
+
+### 1.0.0 [`Stable`]
+```diff
++ First realise
+```
