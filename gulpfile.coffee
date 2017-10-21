@@ -283,7 +283,7 @@ gulp.task 'client:styles', (next)->
         .pipe rename {
             suffix: paths.client.styles.suffix
         }
-        # Сохринение Source Map
+        # Сохранение Source Map
         .pipe if $isProduction then gutil.noop() else sourcemaps.write("./")
         # Сохранение
         .pipe gulp.dest paths.client.styles.to
@@ -305,7 +305,7 @@ gulp.task 'client:coffee', (next)->
         .pipe rename {
             suffix: paths.client.coffee.suffix
         }
-        # Сохринение Source Map
+        # Сохранение Source Map
         .pipe if $isProduction then gutil.noop() else sourcemaps.write("./")
         # Сохранение
         .pipe gulp.dest paths.client.coffee.to
